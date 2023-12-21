@@ -1,3 +1,15 @@
+"""
+Author: Joshua Ashkinaze
+Date: 2023-12-21
+
+Description: Scrapes Politifact data but not metadata, just links and what can be gotten from that
+
+ToDo
+- Fix date functionality it blows past the date even when --d
+- Fix logging showing up
+
+"""
+
 import argparse
 import requests
 import time
@@ -13,9 +25,9 @@ from bs4 import BeautifulSoup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def convert_date(date_str):
-    """Converts a date string to a datetime object."""
+    """Converts a date string to a datetime object in 'YYYY-MM-DD' format."""
     try:
-        return datetime.strptime(date_str, '%B %d, %Y')
+        return datetime.strptime(date_str, '%Y-%m-%d')
     except ValueError:
         return None
 
@@ -35,7 +47,7 @@ def scrape_politifact(earliest_date, filename=None, pause=2):
 
     earliest_date = convert_date(earliest_date)
     if not earliest_date:
-        raise ValueError("Invalid earliest date format. Use 'Month DD, YYYY' format.")
+        raise ValueError("Invalid earliest date format. Use 'YYYY-MM-DD' format.")
 
     logging.info("Starting scraping process...")
     while True:
@@ -88,21 +100,35 @@ def scrape_politifact(earliest_date, filename=None, pause=2):
             logging.error(f'Failed to scrape page {page_start}: {e}')
 
     df = pd.DataFrame(scraped_data)
-    df.to_csv(filename, index=False)
-    logging.info(f"Data saved to {filename}")
+    if filename:
+        df.to_csv(filename, index=False)
+        logging.info(f"Data saved to {filename}")
     return df
 
 def main():
+    date_str = datetime.now().strftime("%Y-%m-%d.%H%M%S")
+
     LOG_FORMAT = '%(asctime)s %(levelname)s: %(message)s'
-    logging.basicConfig(filename=f'{os.path.basename(__file__)}.log', level=logging.INFO, format=LOG_FORMAT,
+    logging.basicConfig(filename=f'{os.path.basename(__file__)}_{date_str}.log', level=logging.INFO, format=LOG_FORMAT,
                         datefmt='%Y-%m-%d %H:%M:%S', filemode='w')
     parser = argparse.ArgumentParser(description="Scrape Politifact data.")
-    parser.add_argument("earliest_date", help="Earliest date for data in 'Month DD, YYYY' format", nargs='?', default=(datetime.now() - timedelta(days=2)).strftime('%B %d, %Y'))
-    parser.add_argument("--fn", help="Filename to save the scraped data", default=f'raw_pf_links_{datetime.now().strftime("%Y%m%d.%H%M%S")}.csv')
+    parser.add_argument("earliest_date", help="Earliest date for data in 'YYYY-MM-DD' format", nargs='?', default=(datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d'))
+    parser.add_argument("--fn", help="Filename to save the scraped data", default=None)
+    parser.add_argument("--d", "--debug", help="Debug mode: scrape only until day before yesterday", action="store_true")
     args = parser.parse_args()
+
+    # Set earliest_date to the day before yesterday in debug mode
+    if args.d:
+        args.earliest_date = (datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d')
+
+    # Set filename if not provided
+    if not args.fn:
+        args.fn = f'raw_pf_links_{date_str}.csv'
+
     logging.info("Starting scraping process with args: " + str(args))
     df = scrape_politifact(args.earliest_date, filename=args.fn)
     logging.info("Scraping complete.")
 
 if __name__ == "__main__":
     main()
+
