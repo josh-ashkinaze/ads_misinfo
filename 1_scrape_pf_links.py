@@ -1,15 +1,3 @@
-"""
-Author: Joshua Ashkinaze
-Date: 2023-12-21
-
-Description: Scrapes Politifact data but not metadata, just links and what can be gotten from that
-
-ToDo
-- Fix date functionality it blows past the date even when --d
-- Fix logging showing up
-
-"""
-
 import argparse
 import requests
 import time
@@ -21,11 +9,9 @@ import logging
 import os
 from bs4 import BeautifulSoup
 
-# Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def convert_date(date_str):
-    """Converts a date string to a datetime object in 'YYYY-MM-DD' format."""
     try:
         return datetime.strptime(date_str, '%Y-%m-%d')
     except ValueError:
@@ -68,7 +54,7 @@ def scrape_politifact(earliest_date, filename=None, pause=2):
                 date = convert_date(date_str)
 
                 if date and date < earliest_date:
-                    logging.info("Reached the earliest date. Stopping scraping.")
+                    logging.info(f"Reached the earliest date ({earliest_date}). Stopping scraping.")
                     return pd.DataFrame(scraped_data)
 
                 quote_div = item.find("div", class_="m-statement__quote")
@@ -112,16 +98,20 @@ def main():
     logging.basicConfig(filename=f'{os.path.basename(__file__)}_{date_str}.log', level=logging.INFO, format=LOG_FORMAT,
                         datefmt='%Y-%m-%d %H:%M:%S', filemode='w')
     parser = argparse.ArgumentParser(description="Scrape Politifact data.")
-    parser.add_argument("earliest_date", help="Earliest date for data in 'YYYY-MM-DD' format", nargs='?', default=(datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d'))
+    parser.add_argument("--earliest_date", help="Earliest date for data in 'YYYY-MM-DD' format", nargs='?', default=(datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d'))
     parser.add_argument("--fn", help="Filename to save the scraped data", default=None)
     parser.add_argument("--d", "--debug", help="Debug mode: scrape only until day before yesterday", action="store_true")
     args = parser.parse_args()
 
-    # Set earliest_date to the day before yesterday in debug mode
     if args.d:
         args.earliest_date = (datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d')
 
-    # Set filename if not provided
+    try:
+        datetime.strptime(args.earliest_date, '%Y-%m-%d')
+    except ValueError:
+        logging.error("Invalid earliest date format. Use 'YYYY-MM-DD' format.")
+        return
+
     if not args.fn:
         args.fn = f'raw_pf_links_{date_str}.csv'
 
@@ -131,4 +121,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
