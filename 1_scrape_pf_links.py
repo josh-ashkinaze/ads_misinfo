@@ -1,3 +1,18 @@
+"""
+Author: Joshua Ashkinaze
+Date: 2023-12-22
+
+Description: Scrape Politifact raw data. This gets links and some basic fields available without clicking each article
+- 'type': type of post, but this field is messy
+- 'date': date of statement,
+- 'title': title of the statement,
+- 'author': journalist writing politifact article,
+- 'url': url of the page so can get more data ,
+- 'is_twitter': helper column,
+- 'raw_desc': the string description of the statement
+- 'truth_value': truth value of the statement
+"""
+
 import argparse
 import requests
 import time
@@ -8,8 +23,6 @@ import numpy as np
 import logging
 import os
 from bs4 import BeautifulSoup
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def convert_date(date_str):
     try:
@@ -27,7 +40,7 @@ def categorize_where(desc):
     except:
         return np.NaN
 
-def scrape_politifact(earliest_date, filename=None, pause=2):
+def scrape_politifact(earliest_date, pause=2):
     page_start = 1
     scraped_data = []
 
@@ -38,7 +51,7 @@ def scrape_politifact(earliest_date, filename=None, pause=2):
     logging.info("Starting scraping process...")
     while True:
         try:
-            page_url = f'https://www.politifact.com/factchecks/list/?page={page_start}&ruling=false'
+            page_url = f'https://www.politifact.com/factchecks/list/?page={page_start}'
             logging.info(f"Scraping page {page_start}...")
             response = requests.get(page_url)
             soup = BeautifulSoup(response.text, 'html.parser')
@@ -49,13 +62,18 @@ def scrape_politifact(earliest_date, filename=None, pause=2):
                 break
 
             for item in containers:
+                meter_div = item.find("div", class_="m-statement__meter")
+                truth_value_img = meter_div.find("img") if meter_div else None
+                truth_value = truth_value_img['alt'] if truth_value_img else 'Truth value not found'
                 footer = item.find("footer", class_="m-statement__footer")
                 author, date_str = (footer.text.strip().split(" • ") if footer else ('Unknown', 'Unknown'))
-                date = convert_date(date_str)
-
-                if date and date < earliest_date:
+                date_object = datetime.strptime(date_str, '%B %d, %Y')
+                date = date_object.strftime('%Y-%m-%d')
+                if date and date < str(earliest_date):
                     logging.info(f"Reached the earliest date ({earliest_date}). Stopping scraping.")
                     return pd.DataFrame(scraped_data)
+                else:
+                    pass
 
                 quote_div = item.find("div", class_="m-statement__quote")
                 url_anchor = quote_div.find("a", href=True) if quote_div else None
@@ -75,7 +93,8 @@ def scrape_politifact(earliest_date, filename=None, pause=2):
                     'author': author.replace("By ", ""),
                     'url': url,
                     'is_twitter': categorize_where(desc),
-                    'raw_desc': desc
+                    'raw_desc': desc,
+                    'truth_value': truth_value
                 }
                 scraped_data.append(scraped_info)
             sleep_time = random.random()*pause
@@ -83,16 +102,13 @@ def scrape_politifact(earliest_date, filename=None, pause=2):
             page_start += 1
 
         except Exception as e:
-            logging.error(f'Failed to scrape page {page_start}: {e}')
+            logging.info(f'Failed to scrape page {page_start}: {e}')
 
     df = pd.DataFrame(scraped_data)
-    if filename:
-        df.to_csv(filename, index=False)
-        logging.info(f"Data saved to {filename}")
     return df
 
 def main():
-    date_str = datetime.now().strftime("%Y-%m-%d.%H%M%S")
+    date_str = datetime.now().strftime("%Y-%m-%d__%H_%M_%S")
 
     LOG_FORMAT = '%(asctime)s %(levelname)s: %(message)s'
     logging.basicConfig(filename=f'{os.path.basename(__file__)}_{date_str}.log', level=logging.INFO, format=LOG_FORMAT,
@@ -116,8 +132,9 @@ def main():
         args.fn = f'raw_pf_links_{date_str}.csv'
 
     logging.info("Starting scraping process with args: " + str(args))
-    df = scrape_politifact(args.earliest_date, filename=args.fn)
+    df = scrape_politifact(args.earliest_date)
     logging.info("Scraping complete.")
+    df.to_csv(args.fn, index=False)
 
 if __name__ == "__main__":
     main()
