@@ -11,6 +11,7 @@ Description: Scrape Politifact raw data. This gets links and some basic fields a
 - 'is_twitter': helper column,
 - 'raw_desc': the string description of the statement
 - 'truth_value': truth value of the statement
+- 'tags': tags of the statement. This is only returned if add argument --t
 """
 
 import argparse
@@ -23,6 +24,15 @@ import numpy as np
 import logging
 import os
 from bs4 import BeautifulSoup
+
+
+def extract_tags_from_url(url):
+    time.sleep(random.random()*1.5)
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    tags = soup.find_all('a', class_='c-tag')
+    extracted_tags = [tag.get_text().strip() for tag in tags]
+    return extracted_tags
 
 def convert_date(date_str):
     try:
@@ -40,7 +50,7 @@ def categorize_where(desc):
     except:
         return np.NaN
 
-def scrape_politifact(earliest_date, pause=2):
+def scrape_politifact(earliest_date, extract_tags=False, pause=2):
     page_start = 1
     scraped_data = []
 
@@ -81,6 +91,11 @@ def scrape_politifact(earliest_date, pause=2):
                 if url and not url.startswith('http'):
                     url = f"https://www.politifact.com{url}"
 
+                if extract_tags:
+                    tags = extract_tags_from_url(url)
+                else:
+                    tags = None
+
                 type_anchor = item.find("a", class_="m-statement__name")
                 title = quote_div.text.strip() if quote_div else 'Unknown'
 
@@ -94,7 +109,8 @@ def scrape_politifact(earliest_date, pause=2):
                     'url': url,
                     'is_twitter': categorize_where(desc),
                     'raw_desc': desc,
-                    'truth_value': truth_value
+                    'truth_value': truth_value,
+                    'tags': tags
                 }
                 scraped_data.append(scraped_info)
             sleep_time = random.random()*pause
@@ -116,6 +132,7 @@ def main():
     parser = argparse.ArgumentParser(description="Scrape Politifact data.")
     parser.add_argument("--earliest_date", help="Earliest date for data in 'YYYY-MM-DD' format", nargs='?', default=(datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d'))
     parser.add_argument("--fn", help="Filename to save the scraped data", default=None)
+    parser.add_argument("--t", help="Whether to also visit each page and extract tags", action="store_true")
     parser.add_argument("--d", "--debug", help="Debug mode: scrape only until day before yesterday", action="store_true")
     args = parser.parse_args()
 
@@ -132,7 +149,7 @@ def main():
         args.fn = f'raw_pf_links_{date_str}.csv'
 
     logging.info("Starting scraping process with args: " + str(args))
-    df = scrape_politifact(args.earliest_date)
+    df = scrape_politifact(args.earliest_date, extract_tags=args.t)
     logging.info("Scraping complete.")
     df.to_csv(args.fn, index=False)
 
