@@ -8,26 +8,12 @@ It uses multithreading to speed up the process and a rotating set of API keys to
 Command-line python script to batch download followers or friends, using a rotated list of APIs.
 
 
-usage: get_people_relation.py [-h] -input_fn INPUT_FN -creds_fn CREDS_FN -relation_type {friends,followers} [-prefix PREFIX] [-start_idx START_IDX]
-                              [-end_idx END_IDX] [--debug] [--minimal]
 
-optional arguments:
-  -h, --help            show this help message and exit
-  -input_fn INPUT_FN, -i INPUT_FN
-                        Input filename, a list of IDs in a text file
-  -creds_fn CREDS_FN, -c CREDS_FN
-                        Filename of credentials
-  -relation_type {friends,followers}, -r {friends,followers}
-                        friends or followers
-  -prefix PREFIX, -p PREFIX
-                        Prefix for filename
-  -start_idx START_IDX, -s START_IDX
-                        Index to start at default = 0
-  -end_idx END_IDX, -e END_IDX
-                        Index to end at, default = end of input file
-  --debug, -d           Change end_idx to 1
-  --minimal, -m         If minimal, use v1 endpoint that only returns ids and not any user data. This endpoint returns 5000 ids per request rather
-                        than 1500.
+Updated 2023-12-23:
+- Due to Twitter API going down, no longer uses multithreading---just the one account that still works
+- Added a flag called max_pull which will pull a max of this many friends or followers
+- Changed get_people_relation_minimal so it works with usernames and not user ids 
+- Depracated get_people_relation
 
 
 
@@ -115,6 +101,7 @@ def get_follow_relation(account_name, client, user_id, relation_type, max_pull):
         where main corresponds to the seed and the other columns are attributes of a particular friend or follower
     """
     # List to hold many people data
+    raise Exception("Deprecated")
     people = []
 
     # List to hold minimal people fields, for writing to log in case CSV file gets messed up
