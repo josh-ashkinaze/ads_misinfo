@@ -45,7 +45,7 @@ import os
 
 import math
 
-def get_people_relations(api, user_list, relation_type, output_fn, account_name, is_minimal):
+def get_people_relations(api, user_list, relation_type, output_fn, account_name, is_minimal, max_pull):
     """
     Manages the people relations function calls. Gets either friends or followers for a list of users,
     rotating different API keys.
@@ -87,13 +87,13 @@ def get_people_relations(api, user_list, relation_type, output_fn, account_name,
 
         for user in user_list:
             logging.info(f"""Parsing {counter} of {len_users} with {account_name}""")
-            people = target_func(account_name, api[api_connection], user, relation_type)
+            people = target_func(account_name, api[api_connection], user, relation_type, max_pull)
             for f in people:
                 writer.writerow(f)
             counter += 1
 
 
-def get_follow_relation(client, user_id, relation_type):
+def get_follow_relation(account_name, client, user_id, relation_type, max_pull):
     """
     Get either friends or followers of a given user.
 
@@ -126,6 +126,10 @@ def get_follow_relation(client, user_id, relation_type):
         for f in tweepy.Paginator(func_call, id=user_id, user_fields=['public_metrics', 'created_at'],
                                   max_results=1000).flatten(
         ):
+            if len(people) >= max_people:
+                break 
+            else:
+                pass                 
             data = dict.fromkeys(
                 ['main', f"""{relation_type}_username""", f"""{relation_type}_id""", f"""{relation_type}_followers""",
                  f"""{relation_type}_following""",
@@ -166,7 +170,7 @@ def get_follow_relation(client, user_id, relation_type):
     return people
 
 
-def get_follow_relation_minimal(account_name, api, user_id, relation_type):
+def get_follow_relation_minimal(account_name, api, user_id, relation_type, max_pull):
     """Get either friends or followers of a given user.
 
     Args:
@@ -174,6 +178,7 @@ def get_follow_relation_minimal(account_name, api, user_id, relation_type):
         api: An instance of the `tweepy.API` class.
         user_id: The ID of the user.
         relation_type: The type of relation to get, either 'friends' or 'followers'.
+        max_pull: stop after this n
 
     Returns:
         A list of dictionaries containing the `main` user ID and the IDs of the
@@ -200,7 +205,10 @@ def get_follow_relation_minimal(account_name, api, user_id, relation_type):
     # Try to fetch the followers for a given user
     # If the initial function call does not throw an error, we enter the `try` block
     try:
-        for f in tweepy.Cursor(func_call, stringify_ids=True, user_id=user_id, count=5000).items():
+        for f in tweepy.Cursor(func_call, stringify_ids=True, screen_name=user_id, count=5000).items():
+            if len(people) >= max_pull:
+                break 
+
             data = dict.fromkeys(keys, str(-999))
             data.update({'main': user_id})
 
@@ -236,13 +244,15 @@ def chunk_list(lst, k):
     return chunks
 
 
-def main(output_fn, input_fn, creds_fn, relation_type, is_minimal, start_idx, end_idx):
+def main(output_fn, input_fn, creds_fn, relation_type, is_minimal, start_idx, end_idx, max_pull):
     # Get ids
     f = open(input_fn)
 
     input_ids = [x.strip() for x in f.readlines()]
     input_ids = input_ids[start_idx:len(input_ids) if end_idx == -1 else end_idx]
 
+    if max_pull == -1:
+        max_pull = 999*1000*1000
 
     # Load twitter creds
     apis_dict = return_api_dict(creds_fn)
@@ -274,7 +284,7 @@ def main(output_fn, input_fn, creds_fn, relation_type, is_minimal, start_idx, en
     threads = []
     for i in range(len(chunks)):
         account_name = list(apis_dict.keys())[i]
-        t = threading.Thread(target=get_people_relations, args=(apis_dict[account_name], chunks[i], relation_type, output_fn + "_" + account_name, account_name, is_minimal))
+        t = threading.Thread(target=get_people_relations, args=(apis_dict[account_name], chunks[i], relation_type, output_fn + "_" + account_name, account_name, is_minimal, max_pull))
         threads.append(t)
         t.start()
 
@@ -282,24 +292,25 @@ def main(output_fn, input_fn, creds_fn, relation_type, is_minimal, start_idx, en
     for t in threads:
         t.join()
 
-    # Get all files in directory
+    # # Get all files in directory
 
-    # Directory
-    path = output_fn.split("__")[0]
+    # # Directory
+    # path = output_fn.split("__")[0]
 
-    # Filename
-    suffix =output_fn.split("__")[1]
-    files = os.listdir(path)
+    # # Filename
+    # suffix =output_fn.split("__")[1]
+    # files = os.listdir(path)
 
-    # Filter out files that don't have the desired name pattern
-    desired_files = [file for file in files if suffix in file and file.endswith(".csv")]
+    # # Filter out files that don't have the desired name pattern
+    # desired_files = [file for file in files if suffix in file and file.endswith(".csv")]
 
-    # Read the csv files into dataframes
-    dfs = [pd.read_csv(os.path.join(path, file), dtype=object) for file in desired_files]
+    # # Read the csv files into dataframes
+    # dfs = [pd.read_csv(file, dtype=object) for file in desired_files]
+    # print(dfs)
 
-    # Concatenate all the dataframes into one
-    merged_df = pd.concat(dfs)
-    merged_df.to_csv(output_fn + "_merged" + ".csv")
+    # # Concatenate all the dataframes into one
+    # merged_df = pd.concat(dfs)
+    # merged_df.to_csv(output_fn + "_merged" + ".csv")
 
     logging.info("ALL DONE")
 
@@ -315,6 +326,8 @@ if __name__ == "__main__":
     parser.add_argument('-start_idx', '-s', dest="start_idx", help="Index to start at default = 0", default=0, type=int)
     parser.add_argument('-end_idx', '-e', dest="end_idx", help="Index to end at, default = end of input file",
                         default=-1, type=int)
+    parser.add_argument('-max_pull', '-mx', dest="max_pull", help="Get max per follower or friend. If -1 then ignore.",
+                        default=50000, type=int)
     parser.add_argument('--debug', '-d', dest="debug", help="Change end_idx to 1", action='store_true')
     parser.add_argument('--minimal', '-m', dest="minimal",
                         help="If minimal, use v1 endpoint that only returns ids and not any user data. This endpoint returns 5000 ids per request rather than 1500.",
@@ -330,4 +343,4 @@ if __name__ == "__main__":
     output_fn = f"""{prefix_tag}{debug_tag}{minimal_tag}{args.relation_type.upper()}_{dt_str()}__START{args.start_idx}_END{end_idx}"""
 
     main(output_fn=output_fn, input_fn=args.input_fn, creds_fn=args.creds_fn, relation_type=args.relation_type,
-         start_idx=args.start_idx, end_idx=end_idx, is_minimal=args.minimal)
+         start_idx=args.start_idx, end_idx=end_idx, is_minimal=args.minimal, max_pull=args.max_pull)
