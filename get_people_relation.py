@@ -265,7 +265,7 @@ def main(output_fn, input_fn, creds_fn, relation_type, is_minimal, start_idx, en
         datefmt='%Y-%m-%d %H:%M:%S',
     )
 
-    logging.info(f"""INPUT:{input_fn}, CREDS:{creds_fn}, "RELATION":{relation_type}, START:END={start_idx}:{end_idx}""")
+    logging.info(f"""INPUT:{input_fn}, CREDS:{creds_fn}, "RELATION":{relation_type}, START:END={start_idx}:{end_idx}, "MAXPULL:{max_pull}""")
 
     # Create threads
     threads = []
@@ -321,7 +321,6 @@ if __name__ == "__main__":
                         action='store_true')
 
     args = parser.parse_args()
-    logging.info(f"ARGS: {args}")
     # If debug mode only get 1 user
     end_idx = 1 if args.debug else args.end_idx
     debug_tag = "DEBUG_" if args.debug else ""
