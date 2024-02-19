@@ -321,6 +321,7 @@ if __name__ == "__main__":
                         action='store_true')
 
     args = parser.parse_args()
+    logging.info(f"ARGS: {args}")
     # If debug mode only get 1 user
     end_idx = 1 if args.debug else args.end_idx
     debug_tag = "DEBUG_" if args.debug else ""
