@@ -3,7 +3,7 @@ Author: Joshua Ashkinaze
 
 Description: Selects the panel of followers for which we pull pre/post Twitter data for.
 
-Specifically, we select 400 followers for each (spreader, treatment) block.
+Specifically, we select 40 followers for each (spreader, treatment) block.
 
 Date: 2024-04-02 13:32:47
 """
