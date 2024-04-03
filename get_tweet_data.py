@@ -17,10 +17,10 @@ There are two jsonl files that are created.
 
 MISSING DATA
 - If there are errors then we still write the data to the file, but we write -1 for keys other than `original_user_id`
+- If the user actually has no tweets then we write -9 instead of -1
 
 Date: 2024-04-03 10:02:23
 """
-
 
 import pandas as pd
 import numpy as np
@@ -42,6 +42,7 @@ client = tweepy.Client(bearer_token=TWITTER_API['bearer_token'], wait_on_rate_li
 def tweet_controller(user_ids, n, fn):
     with open(f'{fn}_raw.jsonl', 'w') as raw_file, open(f'{fn}_procd.jsonl', 'w') as procd_file:
 
+        user_id_no_tweets =0
         user_id_errors = 0
         user_id_success = 0
         counter = 0
@@ -50,8 +51,13 @@ def tweet_controller(user_ids, n, fn):
             # Get data --> -1 if error
             try:
                 tweets = get_tweets(user_id, n)
-                raw, procd = process_tweets(tweets, user_id)
-                user_id_success += 1
+                if tweets.data:
+                    raw, procd = process_tweets(tweets, user_id)
+                    user_id_success += 1
+                else:
+                    raw = {'original_user_id': user_id, 'data': -9, 'includes_users': -1, 'includes_tweets': -9}
+                    procd = {'original_user_id': user_id, 'procd': -9}
+                    user_id_no_tweets += 1
             except Exception as e:
                 logging.info(f"Error for user {user_id}: ")
                 logging.info(f"Error: {e}")
@@ -70,6 +76,7 @@ def tweet_controller(user_ids, n, fn):
     logging.info("Done")
     logging.info(f"Errors: {user_id_errors}")
     logging.info(f"Success: {user_id_success}")
+    logging.info(f"No tweets: {user_id_no_tweets}")
 
 
 def get_tweets(user_id, n=10):
@@ -93,28 +100,30 @@ def get_tweets(user_id, n=10):
 
 
 def process_tweets(tweets_response, user_id):
-    includes_tweet_data = [tweets_response.includes['tweets'][i].data for i in
-                           range(len(tweets_response.includes['tweets']))]
-    includes_user_data = [tweets_response.includes['users'][i].data for i in
-                          range(len(tweets_response.includes['users']))]
+    try:
+        includes_tweet_data = [tweets_response.includes['tweets'][i].data for i in
+                               range(len(tweets_response.includes['tweets']))]
+    except:
+        includes_tweet_data = []
+
+    try:
+        includes_user_data = [tweets_response.includes['users'][i].data for i in
+                              range(len(tweets_response.includes['users']))]
+    except:
+        includes_user_data = []
+
     basic_data = [tweets_response.data[i].data for i in range(len(tweets_response.data))]
     raw = {'original_user_id': user_id, 'data': basic_data, 'includes_users': includes_user_data,
            'includes_tweets': includes_tweet_data}
 
     procd = []
     for i in range(len(tweets_response.data)):
-        procd.append(parse_tweet(tweets_response.data[i].data, tweets_response))
+        procd.append(parse_tweet(tweets_response.data[i].data, includes_tweet_data, includes_user_data))
     procd = {'original_user_id': user_id, 'procd': procd}
     return raw, procd
 
 
-def parse_tweet(tweet, tweets_response):
-    includes_tweet_data = [tweets_response.includes['tweets'][i].data for i in
-                           range(len(tweets_response.includes['tweets']))]
-    includes_user_data = [tweets_response.includes['users'][i].data for i in
-                          range(len(tweets_response.includes['users']))]
-
-
+def parse_tweet(tweet, includes_tweet_data, includes_user_data):
     # Init these empty lists
     tweet['primary_urls'] = []
     tweet['refd_urls'] = []
@@ -171,16 +180,17 @@ def main(n_per_user, file_prefix, debug):
     df = pd.read_csv("hydrated_users.csv", dtype={'id': str})
     if debug:
         df = df.sample(n=10)
+    df = df.sample(n=10)
     user_ids = df['id'].tolist()
     tweet_controller(user_ids, n_per_user, file_prefix)
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Get twitter follower tweet data.')
-    parser.add_argument('n_per_user', type=int, help='Number of items per user')
-    parser.add_argument('file_prefix', type=str, help='Prefix for the output file')
-    parser.add_argument('--d', dest='debug', action='store_true', default=False,
+    parser = argparse.ArgumentParser(description='Get tweet data')
+    parser.add_argument('-n_per_user', '--n_per_user', type=int, required=True, help='Number of items per user')
+    parser.add_argument('-file_prefix', '--file_prefix', type=str, required=True, help='Prefix for the output file')
+    parser.add_argument('-d', '--d', dest='debug', action='store_true', default=False,
                         help='Enable debug mode (default: False)')
 
     args = parser.parse_args()
     main(args.n_per_user, args.file_prefix, args.debug)
-
