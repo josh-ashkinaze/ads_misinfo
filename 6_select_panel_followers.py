@@ -8,7 +8,6 @@ Specifically, we select 40 followers for each (spreader, treatment) block.
 Date: 2024-04-02 13:32:47
 """
 
-
 import pandas as pd
 import tweepy
 import json
@@ -30,6 +29,9 @@ TWITTER_API = secrets['personal_news']
 
 
 def flatten_dict(d, parent_key='', sep='_'):
+    """
+    Flattens a dictionary, concatenating keys with a separator.
+    """
     items = []
     for k, v in d.items():
         new_key = f"{parent_key}{sep}{k}" if parent_key else k
@@ -41,9 +43,12 @@ def flatten_dict(d, parent_key='', sep='_'):
 
 
 def return_tweepy_client(TWITTER_API):
-    """Inits tweepy client"""
+    """
+    Inits tweepy client
+    """
     client = tweepy.Client(bearer_token=TWITTER_API['bearer_token'], wait_on_rate_limit=True)
     return client
+
 
 def hydrate_users(client, master_df, panel_n, panel_n_pad):
     """
@@ -55,7 +60,6 @@ def hydrate_users(client, master_df, panel_n, panel_n_pad):
     """
     pull_n = panel_n + panel_n_pad
     hydrated_users = []
-    errors = []
 
     for (spreader_username, condition), group in master_df.groupby(['spreader_username', 'condition']):
         sample = group.sample(n=pull_n, replace=False)
@@ -69,13 +73,13 @@ def hydrate_users(client, master_df, panel_n, panel_n_pad):
             try:
                 batch = user_ids[index:index + 100]
                 users = client.get_users(ids=batch, user_fields=['created_at', 'description',
-                                                                'protected',
-                                                                'username',
-                                                                'public_metrics',
-                                                                'location',
-                                                                'verified',
-                                                                'verified_type'
-                                                                ])
+                                                                 'protected',
+                                                                 'username',
+                                                                 'public_metrics',
+                                                                 'location',
+                                                                 'verified',
+                                                                 'verified_type'
+                                                                 ])
                 flatten = [flatten_dict(user.data) for user in users.data]
                 for f in flatten:
                     f['spreader_username'] = spreader_username
@@ -118,7 +122,6 @@ def main():
     hydrated_panel = hydrate_users(client, master_df, panel_n, panel_n_pad)
     print(hydrated_panel.groupby(['spreader_username', 'condition']).size())
     print(hydrated_panel.head())
-
 
     hydrated_panel.to_csv("hydrated_users.csv", index=False)
     logging.info("Hydration process completed.")
