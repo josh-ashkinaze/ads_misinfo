@@ -42,98 +42,55 @@ TWITTER_API = secrets['personal_news']
 client = tweepy.Client(bearer_token=TWITTER_API['bearer_token'], wait_on_rate_limit=True)
 
 
-def tweet_controller_ids(df, n_per_user,  fn):
-    user_ids = df['id'].tolist()
+def fetch_and_process_tweets(user_id, n_per_user):
+    try:
+        tweets = get_tweets(user_id, n_per_user)
+        if tweets.data:
+            raw, processed = process_tweets(tweets, user_id)
+        else:
+            raw = {'original_user_id': user_id, 'data': -9, 'includes_users': -9, 'includes_tweets': -9}
+            processed = {'original_user_id': user_id, 'processed': -9}
+    except Exception as e:
+        logging.exception(f"Error for user {user_id}: {e}")
+        raw = {'original_user_id': user_id, 'data': -1, 'includes_users': -1, 'includes_tweets': -1}
+        processed = {'original_user_id': user_id, 'processed': -1}
 
+    return raw, processed
+
+def write_to_files(raw_file, processed_file, raw, processed):
+    raw_file.write(json.dumps(raw) + "\n")
+    processed_file.write(json.dumps(processed) + "\n")
+
+
+def tweet_controller_ids(df, n_per_user, fn):
     with open(f'{fn}_raw.jsonl', 'w') as raw_file, open(f'{fn}_processed.jsonl', 'w') as processed_file:
-        user_id_no_tweets =0
-        user_id_errors = 0
-        user_id_success = 0
-        counter = 0
-
-        for user_id in user_ids:
-            # Get data --> -1 if error
-            try:
-                tweets = get_tweets(user_id, n_per_user)
-                if tweets.data:
-                    raw, processed = process_tweets(tweets, user_id)
-                    user_id_success += 1
-                    # write user id to a text file
-                else:
-                    raw = {'original_user_id': user_id, 'data': -9, 'includes_users': -9, 'includes_tweets': -9}
-                    processed = {'original_user_id': user_id, 'processed': -9}
-                    user_id_no_tweets += 1
-            except Exception as e:
-                logging.info(f"Error for user {user_id}: ")
-                logging.info(f"Error: {e}")
-                raw = {'original_user_id': user_id, 'data': -1, 'includes_users': -1, 'includes_tweets': -1}
-                processed = {'original_user_id': user_id, 'processed': -1}
-                user_id_errors += 1
-
-        # write data
-        raw_file.write(json.dumps(raw) + "\n")
-        processed_file.write(json.dumps(processed) + "\n")
-
-        counter += 1
-        if counter % 50 == 0:
-            logging.info(f"Finished {counter} of {len(user_ids)}")
-
+        for user_id in df['id']:
+            raw, processed = fetch_and_process_tweets(user_id, n_per_user)
+            write_to_files(raw_file, processed_file, raw, processed)
     logging.info("Done")
-    logging.info(f"Errors NOT CAUGHT downstream: {user_id_errors}")
-    logging.info(f"Success: {user_id_success}")
-    logging.info(f"No tweets: {user_id_no_tweets}")
 
 
 def tweet_controller(df, n_per_user, n_users_per_spreader, fn):
-    df = pd.read_csv("hydrated_users.csv", dtype={'id': str})
-
-    with open(f'{fn}_raw.jsonl', 'w') as raw_file, open(f'{fn}_processed.jsonl', 'w') as processed_file, open(f'{fn}_{n_users_per_spreader}_success.csv', 'a', newline='') as success_file:
+    with open(f'{fn}_raw.jsonl', 'w') as raw_file, open(f'{fn}_processed.jsonl', 'w') as processed_file, open(f'{fn}_{n_users_per_spreader}_success.csv', 'w', newline='') as success_file:
         csv_writer = csv.writer(success_file)
         csv_writer.writerow(['id'])
 
         for (spreader_username, condition), group in df.groupby(['spreader_username', 'condition']):
             user_ids = group['id'].tolist()
-            user_id_no_tweets =0
-            user_id_errors = 0
             user_id_success = 0
-            counter = 0
 
+            for user_id in user_ids:
+                if user_id_success >= n_users_per_spreader:
+                    break
 
-            while user_id_success < n_users_per_spreader:
-                for user_id in user_ids:
-                    # Get data --> -1 if error
-                    try:
-                        tweets = get_tweets(user_id, n_per_user)
-                        if tweets.data:
-                            raw, processed = process_tweets(tweets, user_id)
-                            user_id_success += 1
-                            # write user id to a text file
-                        else:
-                            raw = {'original_user_id': user_id, 'data': -9, 'includes_users': -9, 'includes_tweets': -9}
-                            processed = {'original_user_id': user_id, 'processed': -9}
-                            user_id_no_tweets += 1
-                    except Exception as e:
-                        logging.info(f"Error for user {user_id}: ")
-                        logging.info(f"Error: {e}")
-                        raw = {'original_user_id': user_id, 'data': -1, 'includes_users': -1, 'includes_tweets': -1}
-                        processed = {'original_user_id': user_id, 'processed': -1}
-                        user_id_errors += 1
+                raw, processed = fetch_and_process_tweets(user_id, n_per_user)
+                write_to_files(raw_file, processed_file, raw, processed)
 
-                logging.info(f"Finished {user_id_success} of {n_users_per_spreader}")
-                # write data
-                raw_file.write(json.dumps(raw) + "\n")
-                processed_file.write(json.dumps(processed) + "\n")
-
-                counter += 1
-                if counter % 50 == 0:
-                    logging.info(f"Finished {counter} of {len(user_ids)}")
-
-                logging.info("Done with block")
-                logging.info(f"Errors NOT CAUGHT downstream: {user_id_errors}")
-                logging.info(f"Success: {user_id_success}")
-            logging.info(f"No tweets: {user_id_no_tweets}")
-    logging.info("Done with all blocks")
-
+                if raw['data'] != -1 and raw['data'] != -9:
+                    csv_writer.writerow([user_id])
+                    user_id_success += 1
+        logging.info("Finished a spreader block")
+    logging.info("Done with all users")
 
 def get_tweets(user_id, n=10):
     tweets_response = client.get_users_tweets(
