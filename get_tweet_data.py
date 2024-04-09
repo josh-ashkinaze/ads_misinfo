@@ -2,7 +2,7 @@
 Author: Joshua Ashkinaze
 
 Description: Pulls Twitter data for the selected panel of followers, getting `n_user_per_spreader` for (condition, spreader) where we only
-get users who have tweets.
+get users who have tweets. Or if `n_users_per_spreader' not provided then it simply gets all user ids in the df.
 
 USAGE NOTES
 There are two jsonl files that are created.
@@ -31,6 +31,7 @@ import tweepy
 import argparse
 import logging
 import datetime
+import csv
 
 random.seed(416)
 np.random.seed(416)
@@ -41,10 +42,55 @@ TWITTER_API = secrets['personal_news']
 client = tweepy.Client(bearer_token=TWITTER_API['bearer_token'], wait_on_rate_limit=True)
 
 
+def tweet_controller_ids(df, n_per_user,  fn):
+    user_ids = df['id'].tolist()
+
+    with open(f'{fn}_raw.jsonl', 'w') as raw_file, open(f'{fn}_processed.jsonl', 'w') as processed_file:
+        user_id_no_tweets =0
+        user_id_errors = 0
+        user_id_success = 0
+        counter = 0
+
+        for user_id in user_ids:
+            # Get data --> -1 if error
+            try:
+                tweets = get_tweets(user_id, n_per_user)
+                if tweets.data:
+                    raw, processed = process_tweets(tweets, user_id)
+                    user_id_success += 1
+                    # write user id to a text file
+                else:
+                    raw = {'original_user_id': user_id, 'data': -9, 'includes_users': -9, 'includes_tweets': -9}
+                    processed = {'original_user_id': user_id, 'processed': -9}
+                    user_id_no_tweets += 1
+            except Exception as e:
+                logging.info(f"Error for user {user_id}: ")
+                logging.info(f"Error: {e}")
+                raw = {'original_user_id': user_id, 'data': -1, 'includes_users': -1, 'includes_tweets': -1}
+                processed = {'original_user_id': user_id, 'processed': -1}
+                user_id_errors += 1
+
+        # write data
+        raw_file.write(json.dumps(raw) + "\n")
+        processed_file.write(json.dumps(processed) + "\n")
+
+        counter += 1
+        if counter % 50 == 0:
+            logging.info(f"Finished {counter} of {len(user_ids)}")
+
+    logging.info("Done")
+    logging.info(f"Errors NOT CAUGHT downstream: {user_id_errors}")
+    logging.info(f"Success: {user_id_success}")
+    logging.info(f"No tweets: {user_id_no_tweets}")
+
+
 def tweet_controller(df, n_per_user, n_users_per_spreader, fn):
     df = pd.read_csv("hydrated_users.csv", dtype={'id': str})
 
-    with open(f'{fn}_raw.jsonl', 'w') as raw_file, open(f'{fn}_processed.jsonl', 'w') as processed_file:
+    with open(f'{fn}_raw.jsonl', 'w') as raw_file, open(f'{fn}_processed.jsonl', 'w') as processed_file, open(f'{fn}_{n_users_per_spreader}_success.csv', 'a', newline='') as success_file:
+        csv_writer = csv.writer(success_file)
+        csv_writer.writerow(['id'])
+
         for (spreader_username, condition), group in df.groupby(['spreader_username', 'condition']):
             user_ids = group['id'].tolist()
             user_id_no_tweets =0
@@ -82,10 +128,11 @@ def tweet_controller(df, n_per_user, n_users_per_spreader, fn):
                 if counter % 50 == 0:
                     logging.info(f"Finished {counter} of {len(user_ids)}")
 
-    logging.info("Done")
-    logging.info(f"Errors NOT CAUGHT downstream: {user_id_errors}")
-    logging.info(f"Success: {user_id_success}")
-    logging.info(f"No tweets: {user_id_no_tweets}")
+                logging.info("Done with block")
+                logging.info(f"Errors NOT CAUGHT downstream: {user_id_errors}")
+                logging.info(f"Success: {user_id_success}")
+            logging.info(f"No tweets: {user_id_no_tweets}")
+    logging.info("Done with all blocks")
 
 
 def get_tweets(user_id, n=10):
@@ -198,27 +245,29 @@ def parse_tweet(tweet, includes_tweet_data, includes_user_data):
     return tweet
 
 
-def main(n_per_user, n_users_per_spreader, file_prefix, debug):
+def main(fn, n_per_user, n_users_per_spreader, file_prefix, debug):
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d__%H--%M--%S')
-    file_prefix = f"{file_prefix}_{timestamp}_data.log"
+    file_prefix = f"{file_prefix}_{timestamp}.log"
 
     logging.basicConfig(filename=f"{file_prefix}_data.log", filemode='w', level=logging.INFO,
                         format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d__%H--%M--%S')
     df = pd.read_csv("hydrated_users.csv", dtype={'id': str})
     if debug:
         df = df.sample(n=7)
-    df = df.sample(n=7)
-    tweet_controller(df, n_per_user, n_users_per_spreader, file_prefix)
+    if n_users_per_spreader:
+        tweet_controller(df, n_per_user, n_users_per_spreader, file_prefix)
+    else:
+        tweet_controller_ids(df, n_per_user, file_prefix)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Get tweet data')
-    parser.add_argument('-n_users', '--n_users', type=int, required=True, help='Number of users with valid tweets to pull')
-
+    parser.add_argument('-fn', '--fn', type=str, required=True, help='csv file with column `id`')
+    parser.add_argument('-n_users_per_spreader', '--n_users_per_spreader', type=int, required=False, help='Number of users with valid tweets to pull')
     parser.add_argument('-n_per_user', '--n_per_user', type=int, required=True, help='Number of items per user')
     parser.add_argument('-file_prefix', '--file_prefix', type=str, required=True, help='Prefix for the output file')
     parser.add_argument('-d', '--d', dest='debug', action='store_true', default=False,
                         help='Enable debug mode (default: False)')
 
     args = parser.parse_args()
-    main(args.n_per_user, args.file_prefix, args.debug)
+    main(args.fn, args.n_per_user, args.n_users_per_spreader, args.file_prefix, args.debug)

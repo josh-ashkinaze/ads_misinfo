@@ -1,9 +1,11 @@
 """
 Author: Joshua Ashkinaze
 
-Description: Selects the panel of followers for which we pull pre/post Twitter data for.
+Description: Selects the panel of followers for which we pull pre/post Twitter data for. In this script, we
+pull 3x as many followers than we need. This is because in a subsequent part we want to only pull data
+for those followers who have tweets---so it's necessary to oversample in the first part.
 
-Specifically, we select 40 followers for each (spreader, treatment) block.
+Goal is to have 40 followers for each (spreader, treatment) block.
 
 Date: 2024-04-02 13:32:47
 """
@@ -62,14 +64,17 @@ def hydrate_users(client, master_df, panel_n, panel_n_pad):
     hydrated_users = []
 
     for (spreader_username, condition), group in master_df.groupby(['spreader_username', 'condition']):
-        sample = group.sample(n=pull_n, replace=False)
+        n_available = len(group)
+        sample_size = min(n_available, pull_n)
+        sample = group.sample(n=sample_size, replace=False)
+
         user_ids = sample['follower_id'].tolist()
 
         logging.info(f"Hydrating followers for {spreader_username}, {condition}...")
         hydrated_count = 0
         index = 0
 
-        while hydrated_count < panel_n and index < len(user_ids):
+        while hydrated_count < pull_n and index < len(user_ids):
             try:
                 batch = user_ids[index:index + 100]
                 users = client.get_users(ids=batch, user_fields=['created_at', 'description',
@@ -96,7 +101,6 @@ def hydrate_users(client, master_df, panel_n, panel_n_pad):
     logging.info("Hydration process completed.")
     hydrated_df = pd.DataFrame(hydrated_users)
     hydrated_df = hydrated_df.drop_duplicates(subset=['id'])
-    hydrated_df = hydrated_df.groupby(['spreader_username', 'condition']).sample(n=panel_n, replace=False)
     return pd.DataFrame(hydrated_df)
 
 
@@ -118,12 +122,12 @@ def main():
     client = return_tweepy_client(TWITTER_API)
 
     panel_n = 40
-    panel_n_pad = 1000
+    panel_n_pad = int(panel_n*4)
     hydrated_panel = hydrate_users(client, master_df, panel_n, panel_n_pad)
     print(hydrated_panel.groupby(['spreader_username', 'condition']).size())
     print(hydrated_panel.head())
 
-    hydrated_panel.to_csv("hydrated_users.csv", index=False)
+    hydrated_panel.to_csv("oversample_hydrated_users.csv", index=False)
     logging.info("Hydration process completed.")
 
 
