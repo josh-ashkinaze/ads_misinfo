@@ -57,6 +57,7 @@ def fetch_and_process_tweets(user_id, n_per_user):
 
     return raw, processed
 
+
 def write_to_files(raw_file, processed_file, raw, processed):
     raw_file.write(json.dumps(raw) + "\n")
     processed_file.write(json.dumps(processed) + "\n")
@@ -71,9 +72,10 @@ def tweet_controller_ids(df, n_per_user, fn):
 
 
 def tweet_controller(df, n_per_user, n_users_per_spreader, fn):
-    with open(f'{fn}_raw.jsonl', 'w') as raw_file, open(f'{fn}_processed.jsonl', 'w') as processed_file, open(f'{fn}_{n_users_per_spreader}_success.csv', 'w', newline='') as success_file:
+    with open(f'{fn}_raw.jsonl', 'w') as raw_file, open(f'{fn}_processed.jsonl', 'w') as processed_file, open(
+            f'{fn}_{n_users_per_spreader}_success.csv', 'w', newline='') as success_file:
         csv_writer = csv.writer(success_file)
-        csv_writer.writerow(['id'])
+        csv_writer.writerow(['follower_id', 'spreader_username', 'condition'])
 
         for (spreader_username, condition), group in df.groupby(['spreader_username', 'condition']):
             user_ids = group['id'].tolist()
@@ -82,15 +84,16 @@ def tweet_controller(df, n_per_user, n_users_per_spreader, fn):
             for user_id in user_ids:
                 if user_id_success >= n_users_per_spreader:
                     break
-
                 raw, processed = fetch_and_process_tweets(user_id, n_per_user)
-                write_to_files(raw_file, processed_file, raw, processed)
-
                 if raw['data'] != -1 and raw['data'] != -9:
-                    csv_writer.writerow([user_id])
+                    write_to_files(raw_file, processed_file, raw, processed)
+                    csv_writer.writerow([user_id, spreader_username, condition])
                     user_id_success += 1
-        logging.info("Finished a spreader block")
+            logging.info("Finished a spreader block")
+            logging.info("Success {}".format(user_id_success))
+
     logging.info("Done with all users")
+
 
 def get_tweets(user_id, n=10):
     tweets_response = client.get_users_tweets(
@@ -113,7 +116,6 @@ def get_tweets(user_id, n=10):
 
 
 def process_tweets(tweets_response, user_id):
-
     # Try to get included tweets unless there are no included tweets bundled
     try:
         includes_tweet_data = [tweets_response.includes['tweets'][i].data for i in
@@ -179,7 +181,8 @@ def parse_tweet(tweet, includes_tweet_data, includes_user_data):
 
                     # Try to get refd tweet urls except pass
                     try:
-                        urls = included_tweet.get('entities', {}).get('urls', []) if 'entities' in included_tweet else []
+                        urls = included_tweet.get('entities', {}).get('urls',
+                                                                      []) if 'entities' in included_tweet else []
                         expanded_urls = [url['expanded_url'] for url in urls if 'expanded_url' in url]
                         ref_tweet['urls'].extend(expanded_urls)
                         tweet['refd_urls'].extend(expanded_urls)
@@ -204,13 +207,12 @@ def parse_tweet(tweet, includes_tweet_data, includes_user_data):
 
 def main(fn, n_per_user, n_users_per_spreader, file_prefix, debug):
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d__%H--%M--%S')
-    file_prefix = f"{file_prefix}_{timestamp}.log"
+    file_prefix = f"{file_prefix}_{timestamp}"
 
     logging.basicConfig(filename=f"{file_prefix}_data.log", filemode='w', level=logging.INFO,
                         format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d__%H--%M--%S')
     df = pd.read_csv("hydrated_users.csv", dtype={'id': str})
-    if debug:
-        df = df.sample(n=7)
+    df = df.sample(frac=1, random_state=42)
     if n_users_per_spreader:
         tweet_controller(df, n_per_user, n_users_per_spreader, file_prefix)
     else:
@@ -220,7 +222,8 @@ def main(fn, n_per_user, n_users_per_spreader, file_prefix, debug):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Get tweet data')
     parser.add_argument('-fn', '--fn', type=str, required=True, help='csv file with column `id`')
-    parser.add_argument('-n_users_per_spreader', '--n_users_per_spreader', type=int, required=False, help='Number of users with valid tweets to pull')
+    parser.add_argument('-n_users_per_spreader', '--n_users_per_spreader', type=int, required=False,
+                        help='Number of users with valid tweets to pull')
     parser.add_argument('-n_per_user', '--n_per_user', type=int, required=True, help='Number of items per user')
     parser.add_argument('-file_prefix', '--file_prefix', type=str, required=True, help='Prefix for the output file')
     parser.add_argument('-d', '--d', dest='debug', action='store_true', default=False,
