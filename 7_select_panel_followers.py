@@ -112,7 +112,7 @@ def main():
 
     for username in usernames:
         for condition in conditions:
-            df = pd.read_csv(f'{condition}_twit_{username}.txt', header=None)
+            df = pd.read_csv(f'final_{condition}_twit_{username}.txt', header=None)
             df['condition'] = condition
             df['spreader_username'] = username
             df.columns = ['follower_id', 'condition', 'spreader_username']
