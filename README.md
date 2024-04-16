@@ -35,14 +35,14 @@ Here we downsample the followers in accordance with the results of the power ana
 
 
 # `7_select_panel_followers.py`
-In this script we aim to track 40 followers per spreader but one of the issues is that we do not know
-which followers will have valid tweet data in the next step. So we add some padding and hydrate data for 40*4 followers and this results in
+In this script we aim to track 40 followers per (spreader, condition) but one of the issues is that we do not know
+which followers will have valid tweet data in the next step. So we add some padding and hydrate data for more users than the next step will employ. This results in
 `oversample_hydrated_users.csv`
 
 # `8_get_pre_tweet_data.sh`
-This script fetches 20 tweets for 40 followers with valid tweets. We stop searching after hit 40. 
-The bash call is `python3 get_tweet_data.py --fn 'oversample_hydrated_users.csv' --n_per_user 20 --n_users_per_spreader 40 --file_prefix "pre"`. The final list of of followers is
-`pre_40_success.csv` and there `pre_raw.jsonl` and `pre_processed.jsonl` contain tweet data where
+Reading from `oversample_hydrated_users.csv`, this script fetches 20 tweets for 40 followers with valid tweets for each (misinfo spreader, condition) cell. We stop searching after hit 40. 
+The bash call is `python3 get_tweet_data.py --fn 'oversample_hydrated_users.csv' --n_per_user 20 --n_users_per_spreader 40 --file_prefix "pre"`. The final list of valid followers (a subset of `oversample_hydrated_users.csv`) is
+`pre_40_success.csv` and `pre_raw.jsonl` and `pre_processed.jsonl` contain tweet data where
 the latter has some light processing to it. 
 
 
