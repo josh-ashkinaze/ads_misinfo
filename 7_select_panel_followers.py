@@ -62,6 +62,7 @@ def hydrate_users(client, master_df, panel_n, panel_n_pad):
     """
     pull_n = panel_n + panel_n_pad
     hydrated_users = []
+    hydrated_ids = {}
 
     for (spreader_username, condition), group in master_df.groupby(['spreader_username', 'condition']):
         n_available = len(group)
@@ -96,8 +97,9 @@ def hydrate_users(client, master_df, panel_n, panel_n_pad):
                     f['spreader_username'] = spreader_username
                     f['condition'] = condition
                     f['id'] = str(f['id'])
-                    if f not in hydrated_users and f['protected'] is False and f['public_metrics_followers_count'] > 0 and f['public_metrics_following_count'] > 0 and f['public_metrics_tweet_count'] > 0:
+                    if f['id'] not in hydrated_ids and f['protected'] is False and f['public_metrics_followers_count'] > 0 and f['public_metrics_following_count'] > 0 and f['public_metrics_tweet_count'] > 0:
                         valid_users.append(f)
+                        hydrated_ids.append(f['id'])
                 hydrated_users.extend(valid_users)
                 hydrated_count += len(valid_users)
                 index += 100
