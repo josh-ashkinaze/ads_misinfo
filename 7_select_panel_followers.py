@@ -86,12 +86,20 @@ def hydrate_users(client, master_df, panel_n, panel_n_pad):
                                                                  'verified_type'
                                                                  ])
                 flatten = [flatten_dict(user.data) for user in users.data]
+
+                # Now we only add users if
+                # - their tweets are not protected
+                # - have non zero followers, friends, tweets
+                # - were not added yet
+                valid_users = []
                 for f in flatten:
                     f['spreader_username'] = spreader_username
                     f['condition'] = condition
                     f['id'] = str(f['id'])
-                hydrated_users.extend(flatten)
-                hydrated_count += len(users)
+                    if f not in hydrated_users and f['protected'] is False and f['public_metrics_followers_count'] > 0 and f['public_metrics_following_count'] > 0 and f['public_metrics_tweet_count'] > 0:
+                        valid_users.append(f)
+                hydrated_users.extend(valid_users)
+                hydrated_count += len(valid_users)
                 index += 100
             except Exception as e:
                 logging.error(f"Error while hydrating {spreader_username}, {condition}: {e}")
@@ -105,7 +113,9 @@ def hydrate_users(client, master_df, panel_n, panel_n_pad):
 
 
 def main():
+    pad = 20
     logging.info("Starting up")
+    logging.info("Pad {}".format(pad))
     dfs = []
     usernames = ['charliekirk11', 'gatewaypundit', 'jackposobiec', 'realcandaceo', 'stkirsch']
     conditions = ['treat', 'ctrl']
@@ -122,10 +132,14 @@ def main():
     client = return_tweepy_client(TWITTER_API)
 
     panel_n = 40
-    panel_n_pad = int(panel_n*4)
+    panel_n_pad = int(panel_n*pad)
     hydrated_panel = hydrate_users(client, master_df, panel_n, panel_n_pad)
+    hydrated_panel = hydrated_panel.drop_duplicates(subset=['id'])
     print(hydrated_panel.groupby(['spreader_username', 'condition']).size())
     print(hydrated_panel.head())
+
+    logging.info(str(hydrated_panel.groupby(['spreader_username', 'condition']).size()))
+    logging.info(str(hydrated_panel.head()))
 
     hydrated_panel.to_csv("oversample_hydrated_users.csv", index=False)
     logging.info("Hydration process completed.")
