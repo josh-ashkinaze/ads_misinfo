@@ -211,7 +211,7 @@ def main(fn, n_per_user, n_users_per_spreader, file_prefix, debug):
 
     logging.basicConfig(filename=f"{file_prefix}_data.log", filemode='w', level=logging.INFO,
                         format='%(asctime)s: %(message)s', datefmt='%Y-%m-%d__%H--%M--%S')
-    df = pd.read_csv("hydrated_users.csv", dtype={'id': str})
+    df = pd.read_csv(fn, dtype={'id': str})
     df = df.sample(frac=1, random_state=42)
     if n_users_per_spreader:
         tweet_controller(df, n_per_user, n_users_per_spreader, file_prefix)
