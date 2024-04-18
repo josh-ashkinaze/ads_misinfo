@@ -10,7 +10,6 @@ The first stage filters PolitiFact links. Filters are related to:
 - truth values (only pants on fire, false, mostly false)
 - date ranges: after 2021-06-01
 - about health
-- occured on X (which we try to assess by looking at the description of the rumor)
 
 Then we manually searched for an associated Twitter account of each of the posts.
 
