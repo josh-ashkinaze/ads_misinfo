@@ -91,13 +91,14 @@ def hydrate_users(client, master_df, panel_n, panel_n_pad):
                 # Now we only add users if
                 # - their tweets are not protected
                 # - have non zero followers, friends, tweets
+                # - NEW: Have more than 20 tweets
                 # - were not added yet
                 valid_users = []
                 for f in flatten:
                     f['spreader_username'] = spreader_username
                     f['condition'] = condition
                     f['id'] = str(f['id'])
-                    if f['id'] not in hydrated_ids and f['protected'] is False and f['public_metrics_followers_count'] > 0 and f['public_metrics_following_count'] > 0 and f['public_metrics_tweet_count'] > 0:
+                    if f['id'] not in hydrated_ids and f['protected'] is False and f['public_metrics_followers_count'] > 0 and f['public_metrics_following_count'] > 0 and f['public_metrics_tweet_count'] > 20:
                         valid_users.append(f)
                         hydrated_ids.append(f['id'])
                 hydrated_users.extend(valid_users)
